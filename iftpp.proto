@@ -1,6 +1,5 @@
 syntax = "proto3";
 
-option go_package = "github.com/degenerat3/iftpp";
 
 /*Proto for Insecure File Transfer Protocol over Ping */
 message IFTPP {
