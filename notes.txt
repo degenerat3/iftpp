@@ -1,0 +1,20 @@
+first step is session id (from client)
+ack the id from server
+
+second step is key negotiation handshake:
+    propose from client,
+    propose from server, 
+    they calculate the key offline
+
+client sends req for file (includes session id and path, chunks are XOR'd with key)
+
+server: 
+file -> base64, XOR chunks with key, put into proto and send
+
+client:
+recieve and run checksum, then send back checksum. if it doesn't match drop the packet, else decrypt the chunk and append the b64 to the ongoing fd
+
+server:
+if the resp checksum matches then send the next chunk, else resend the prev
+
+at the end, send one w/ final checksum from server to client. Client does final checkum of its copy and if they don't match they try the whole thing again
