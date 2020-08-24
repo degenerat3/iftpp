@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+/*Proto for Insecure File Transfer Protocol over Ping */
+message IFTPP {
+  int32 session_id = 1;     // unique int will be generated for each session
+  bytes payload = 2;        // the actual data being sent will go here
+  bytes checksum = 3;       // last 8 digits of payload SHA1 will go here
+
+  enum Flag {               
+      SESSION_INIT = 0;     // used by client to propose session ID
+      ACK = 1;              // generic acknowledge, multiple uses
+      CLIENT_KEY = 2;       // client proposed key
+      SERVER_KEY = 3;       // server proposed key
+      FILE_REQ = 4;         // client requesting file
+      FILE_DATA = 5;        // requested file data
+      FIN = 6;              // transfer is complete
+  }
+  Flag type_flag = 4;       // flag to say what type of data is in the payload
+}
