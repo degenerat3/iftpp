@@ -10,6 +10,8 @@ import (
 func calcChecksum() {}
 
 func buildProto() []byte {
+
+	// garbage test data
 	tp := []byte("testingtestingtesting")
 	tc := []byte("abcdefgh")
 	testPro := &IFTPP{
