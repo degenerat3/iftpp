@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+option go_package = "github.com/degenerat3/iftpp";
+
 /*Proto for Insecure File Transfer Protocol over Ping */
 message IFTPP {
   int32 session_id = 1;     // unique int will be generated for each session
