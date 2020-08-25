@@ -1,24 +1,20 @@
 package main
 
 import (
-	"log"
-
-	"github.com/degenerat3/iftpp/pbuf/iftpp"
+	"github.com/degenerat3/iftpp/pbuf"
 	"github.com/golang/protobuf/proto"
+	"golang.org/x/net/icmp"
+	"log"
 )
 
 func calcChecksum() {}
 
-func buildProto() []byte {
-
-	// garbage test data
-	tp := []byte("testingtestingtesting")
-	tc := []byte("abcdefgh")
-	testPro := &IFTPP{
-		Session_id: 1234,
-		Payload:    tp,
-		Checksum:   tc,
-		Flag:       2,
+func buildProto(sid int32, payld []byte, chksum []byte, typ pbuf.IFTPP_Flag) []byte {
+	testPro := &pbuf.IFTPP{
+		SessionId: sid,
+		Payload:   payld,
+		Checksum:  chksum,
+		TypeFlag:  typ,
 	}
 
 	data, err := proto.Marshal(testPro)
@@ -30,3 +26,11 @@ func buildProto() []byte {
 }
 
 func decodeProto() {}
+
+func getListener(ip string) *icmp.PacketConn {
+	conn, err := icmp.ListenPacket("ip4:icmp", ip)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return conn
+}
