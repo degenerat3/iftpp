@@ -1,41 +1,26 @@
 package main
 
 import (
-	"golang.org/x/net/icmp"
-	"golang.org/x/net/ipv4"
+	"github.com/degenerat3/iftpp/pbuf"
 	"log"
 	"net"
 )
 
-func clnt(dstIP string) {
+func clnt(dstIP string, reqFile string) {
 	// Start con to listen for replies
-	c, err := icmp.ListenPacket("ip4:icmp", "0.0.0.0")
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-	defer c.Close()
+	conn := getListener("0.0.0.0")
+	defer conn.Close()
 
-	// Resolve any DNS (if used) and get the real IP of the target
+	// Resolve DNS
 	dst, err := net.ResolveIPAddr("ip4", dstIP)
 	if err != nil {
-		panic(err)
-	}
-
-	// Craft a new echo
-	m := icmp.Message{
-		Type: ipv4.ICMPTypeEcho, Code: 0,
-		Body: &icmp.RawBody{
-			Data: []byte("Helloxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"),
-		},
-	}
-	b, err := m.Marshal(nil)
-	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, err = c.WriteTo(b, dst)
-	if err != nil {
-		log.Fatal(err)
-	}
+	var sid int32 = 43
+	var pyld = []byte("hello world")
+	var chk = calcChecksum(pyld)
+	var flg pbuf.IFTPP_Flag = 5
+
+	writeToListener(conn, dst, sid, pyld, chk, flg)
 }
