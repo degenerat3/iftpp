@@ -16,6 +16,7 @@ message IFTPP {
       FILE_REQ = 4;         // client requesting file
       FILE_DATA = 5;        // requested file data
       FIN = 6;              // transfer is complete
+      RETRANS = 7;           // request retransmission of prev packet
   }
   Flag type_flag = 4;       // flag to say what type of data is in the payload
 }
