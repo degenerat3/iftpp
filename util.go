@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/ipv4"
 	"log"
 	"net"
+	"sort"
 	"time"
 )
 
@@ -31,6 +32,16 @@ func calcChecksum(data []byte) []byte {
 	sha := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
 	chk := sha[len(sha)-9 : len(sha)-1]
 	return []byte(chk)
+}
+
+// calculate the shared key by combining keys, sort by descending, then taking sha1
+func calcSharedKey(key1 []byte, key2 []byte) []byte {
+	combined := append(key1, key2...)                                                  // put two keys together
+	sort.Slice(combined, func(i int, j int) bool { return combined[i] > combined[j] }) // sort descending
+	hasher := sha1.New()
+	hasher.Write(combined)
+	sha := base64.URLEncoding.EncodeToString(hasher.Sum(nil))
+	return []byte(sha)
 }
 
 // generate an icmp listener on the specified IP (usually 0.0.0.0)
@@ -136,4 +147,28 @@ func writeToListener(conn *icmp.PacketConn, dst net.Addr, sid int32, payld []byt
 		log.Fatal(err)
 	}
 	return
+}
+
+// xor key with the data
+func xorData(data []byte, key []byte) []byte {
+	var output []byte
+	for i := 0; i < len(data); i++ {
+		kIndex := i % len(key)
+		xdata := data[i] ^ key[kIndex]
+		output = append(output, xdata)
+	}
+	return output
+}
+
+func compareChks(myChk []byte, chk []byte) bool {
+	if len(myChk) != len(chk) {
+		return false
+	}
+
+	for i, j := range myChk {
+		if j != chk[i] {
+			return false
+		}
+	}
+	return true
 }
