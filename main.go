@@ -8,7 +8,8 @@ func main() {
 	a := os.Args[1]
 	if a == "client" {
 		ip := os.Args[2]
-		clnt(ip)
+		reqFile := os.Args[3]
+		clnt(ip, reqFile)
 	}
 	if a == "server" {
 		srvr()
