@@ -1,12 +1,24 @@
 package main
 
 import (
+	"fmt"
 	"github.com/degenerat3/iftpp/pbuf"
 	"log"
+	"math/rand"
 	"net"
+	"os"
 )
 
+var cachedSID int32           // the SID from the previous packet sent
+var cachedPyld []byte         // the payload from the previous packet sent
+var cachedChk []byte          // the checksum from the previous packet sent
+var cachedFlg pbuf.IFTPP_Flag // the flag from the previous packet sent
+var clntKey []byte            // the client key
+var shrdKey []byte            // the calculated combined key
+var fdata []byte              // all file content data (written to disk at the end)
+
 func clnt(dstIP string, reqFile string) {
+	fmt.Printf("[+] Starting transfer for '%s' from '%s'\n", reqFile, dstIP)
 	// Start con to listen for replies
 	conn := getListener("0.0.0.0")
 	defer conn.Close()
@@ -17,10 +29,141 @@ func clnt(dstIP string, reqFile string) {
 		log.Fatal(err)
 	}
 
-	var sid int32 = 43
-	var pyld = []byte("hello world")
-	var chk = calcChecksum(pyld)
-	var flg pbuf.IFTPP_Flag = 5
-
+	sid, pyld, chk, flg := genInit()
+	fmt.Println("[+] Initiating server connection")
 	writeToListener(conn, dst, sid, pyld, chk, flg)
+
+	respProto, _ := readFromListener(conn)
+
+recvLoop:
+	for {
+		switch respFlag := respProto.GetTypeFlag(); respFlag {
+		case 0: // session init
+			continue // the client shouln't be seeing this
+		case 1: // ack
+			switch rcvdPyld := string(respProto.GetPayload()); rcvdPyld {
+			case "sidAck": // server acking the SID
+				pyld, chk, flg := genClientKey()
+				clntKey = pyld
+				updateCache(sid, pyld, chk, flg)
+				writeToListener(conn, dst, sid, pyld, chk, flg)
+				continue
+			}
+
+		case 2: // client key
+			continue // the client shouldn't be seeing this
+
+		case 3: // server key
+			srvrKey := respProto.GetPayload()
+			fmt.Println("[+] Key exchange complete, calculating shared key")
+			shrdKey = calcSharedKey(clntKey, srvrKey)
+			pyld, chk, flg := genFileReq(reqFile)
+			fmt.Println("[+] Sending file request")
+			writeToListener(conn, dst, sid, pyld, chk, flg)
+
+		case 4: // file req
+			continue // the client shouldn't be seeing this
+
+		case 5: // file data
+			match := processFileData(respProto.GetPayload(), respProto.GetChecksum())
+			if match == false { // if our checksum didn't pass, requeset a retransmission
+				writeToListener(conn, dst, sid, []byte(""), []byte(""), 7)
+			}
+			writeToListener(conn, dst, sid, []byte("fDataAck"), []byte(""), 1) // if checksum passed, ack it
+			continue
+
+		case 6: // fin
+			chkMatch, filChkMatch := processFin(respProto.GetPayload(), respProto.GetChecksum(), reqFile)
+			if chkMatch == false { // checksum mismatch, retransmit the FIN
+				writeToListener(conn, dst, sid, []byte(""), []byte(""), 7)
+				continue
+			}
+
+			if filChkMatch == false { // file data mismatch, restart whole transfer
+				sid, pyld, chk, flg := genInit()
+				writeToListener(conn, dst, sid, pyld, chk, flg)
+				continue
+			}
+			break recvLoop
+
+		case 7: //retrans
+			writeToListener(conn, dst, cachedSID, cachedPyld, cachedChk, cachedFlg) // write the previous (cached) packet
+			continue
+
+		default:
+			continue
+		}
+	}
+	fmt.Println("[+] Transfer complete!")
+
+}
+
+func updateCache(sid int32, pyld []byte, chk []byte, flg pbuf.IFTPP_Flag) {
+	cachedSID = sid
+	cachedPyld = pyld
+	cachedChk = chk
+	cachedFlg = flg
+	return
+}
+
+func genInit() (int32, []byte, []byte, pbuf.IFTPP_Flag) {
+	var sid int32 = 0
+	newSid := make([]byte, 4)
+	rand.Read(newSid)
+	var pyld = newSid
+	var chk = calcChecksum(pyld)
+	var flg pbuf.IFTPP_Flag = 0
+
+	return sid, pyld, chk, flg
+}
+
+func genClientKey() ([]byte, []byte, pbuf.IFTPP_Flag) {
+	cliKey := make([]byte, 16)
+	rand.Read(cliKey)
+	var pyld = cliKey
+	var chk = calcChecksum(pyld)
+	var flg pbuf.IFTPP_Flag = 2
+
+	return pyld, chk, flg
+}
+
+func genFileReq(reqFile string) ([]byte, []byte, pbuf.IFTPP_Flag) {
+	pyld := []byte(reqFile)
+	chk := calcChecksum(pyld)
+	var flg pbuf.IFTPP_Flag = 4
+	return pyld, chk, flg
+}
+
+func processFileData(pyld []byte, chk []byte) bool {
+	myChk := calcChecksum(pyld)
+	if match := compareChks(myChk, chk); match == false {
+		return false
+	}
+	decodedFileData := xorData(pyld, shrdKey)
+	fdata = append(fdata, decodedFileData...)
+	return true
+}
+
+func processFin(pyld []byte, chk []byte, reqFile string) (bool, bool) {
+	myChk := calcChecksum(pyld)
+	if match := compareChks(myChk, chk); match == false {
+		return false, false // if the FIN payload is mangled, RETRANS is required
+	}
+
+	myFileDataCheck := calcChecksum(fdata)
+	if match := compareChks(myFileDataCheck, chk); match == false {
+		return true, false // if the final file checksums don't match, restart entire transfer
+	}
+
+	fil, err := os.Create(reqFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	n, err := fil.Write(fdata)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("[+] Wrote %d bytes to to '%s'.\n", n, reqFile)
+	return true, true // file data checksum matched, transfer complete + file written
 }
