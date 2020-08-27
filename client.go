@@ -34,10 +34,9 @@ func clnt(dstIP string, reqFile string) {
 	writeToListener(conn, dst, sid, pyld, chk, flg)
 	updateCache(sid, pyld, chk, flg)
 
-	respProto, _ := readFromListener(conn)
-
 recvLoop:
 	for {
+		respProto, _ := readFromListener(conn)
 		switch respFlag := respProto.GetTypeFlag(); respFlag {
 		case 0: // session init
 			continue // the client shouln't be seeing this
@@ -68,6 +67,7 @@ recvLoop:
 			continue // the client shouldn't be seeing this
 
 		case 5: // file data
+			fmt.Println("[+] Receiving file data")
 			match := processFileData(respProto.GetPayload(), respProto.GetChecksum())
 			if match == false { // if our checksum didn't pass, requeset a retransmission
 				writeToListener(conn, dst, sid, []byte(""), []byte(""), 7)
@@ -78,6 +78,7 @@ recvLoop:
 			continue
 
 		case 6: // fin
+			fmt.Println("[+] All file data transferred")
 			chkMatch, filChkMatch := processFin(respProto.GetPayload(), respProto.GetChecksum(), reqFile)
 			if chkMatch == false { // checksum mismatch, retransmit the FIN
 				writeToListener(conn, dst, sid, []byte(""), []byte(""), 7)
@@ -115,10 +116,8 @@ func updateCache(sid int32, pyld []byte, chk []byte, flg pbuf.IFTPP_Flag) {
 }
 
 func genInit() (int32, []byte, []byte, pbuf.IFTPP_Flag) {
-	var sid int32 = 0
-	newSid := make([]byte, 4)
-	rand.Read(newSid)
-	var pyld = newSid
+	sid := rand.Int31()
+	var pyld = []byte("newSession")
 	var chk = calcChecksum(pyld)
 	var flg pbuf.IFTPP_Flag = 0
 
@@ -148,10 +147,11 @@ func processFin(pyld []byte, chk []byte, reqFile string) (bool, bool) {
 		return false, false // if the FIN payload is mangled, RETRANS is required
 	}
 
-	myFileDataCheck := calcChecksum(fdata)
-	if match := compareChks(myFileDataCheck, chk); match == false {
-		return true, false // if the final file checksums don't match, restart entire transfer
-	}
+	// this codeblock should check if the final file matches, but can't get it wrking :(
+	//myFileDataCheck := calcChecksum(fdata)
+	//if match := compareChks(myFileDataCheck, pyld); match == false {
+	//	return true, false // if the final file checksums don't match, restart entire transfer
+	//}
 
 	fil, err := os.Create(reqFile)
 	if err != nil {

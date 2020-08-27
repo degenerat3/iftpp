@@ -68,6 +68,7 @@ recvLoop:
 			ses := getSession(sid)
 			fName := respProto.GetPayload()
 			ses.fName = fName
+			splitFile(ses)
 			peer, pyld, chk, flg := genFileData(sid)
 			writeToListener(conn, peer, sid, pyld, chk, flg)
 			updateSessionCache(sid, pyld, chk, flg)
@@ -100,9 +101,9 @@ func genSession(respProto *pbuf.IFTPP, peer net.Addr) session {
 }
 
 func getSession(sid int32) *session {
-	for _, ses := range sessions {
+	for i, ses := range sessions {
 		if sid == ses.sid {
-			return &ses
+			return &sessions[i]
 		}
 	}
 	return nil
@@ -127,10 +128,9 @@ func splitFile(ses *session) {
 	ses.fChksm = fChksm
 
 	for {
-		chnk := allData[0 : splitSize-1]
-		fChunks = append(fChunks, chnk)
-
 		if len(allData) > splitSize {
+			chnk := allData[0 : splitSize-1]
+			fChunks = append(fChunks, chnk)
 			allData = allData[splitSize:]
 		} else {
 			fChunks = append(fChunks, allData)
@@ -144,7 +144,9 @@ func splitFile(ses *session) {
 func getNextChunk(ses *session) []byte {
 	if len(ses.fData) > 0 {
 		next := ses.fData[0]
-		ses.fData = ses.fData[1:]
+		if len(ses.fData) >= 1 {
+			ses.fData = ses.fData[1:]
+		}
 		return next
 	}
 	return []byte("")
