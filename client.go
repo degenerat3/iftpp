@@ -32,6 +32,7 @@ func clnt(dstIP string, reqFile string) {
 	sid, pyld, chk, flg := genInit()
 	fmt.Println("[+] Initiating server connection")
 	writeToListener(conn, dst, sid, pyld, chk, flg)
+	updateCache(sid, pyld, chk, flg)
 
 	respProto, _ := readFromListener(conn)
 
@@ -43,10 +44,10 @@ recvLoop:
 		case 1: // ack
 			switch rcvdPyld := string(respProto.GetPayload()); rcvdPyld {
 			case "sidAck": // server acking the SID
-				pyld, chk, flg := genClientKey()
+				pyld, chk := genKey()
 				clntKey = pyld
 				updateCache(sid, pyld, chk, flg)
-				writeToListener(conn, dst, sid, pyld, chk, flg)
+				writeToListener(conn, dst, sid, pyld, chk, 2)
 				continue
 			}
 
@@ -60,6 +61,8 @@ recvLoop:
 			pyld, chk, flg := genFileReq(reqFile)
 			fmt.Println("[+] Sending file request")
 			writeToListener(conn, dst, sid, pyld, chk, flg)
+			updateCache(sid, pyld, chk, flg)
+			continue
 
 		case 4: // file req
 			continue // the client shouldn't be seeing this
@@ -68,22 +71,27 @@ recvLoop:
 			match := processFileData(respProto.GetPayload(), respProto.GetChecksum())
 			if match == false { // if our checksum didn't pass, requeset a retransmission
 				writeToListener(conn, dst, sid, []byte(""), []byte(""), 7)
+				updateCache(sid, []byte(""), []byte(""), 7)
 			}
 			writeToListener(conn, dst, sid, []byte("fDataAck"), []byte(""), 1) // if checksum passed, ack it
+			updateCache(sid, []byte("fDataAck"), []byte(""), 1)
 			continue
 
 		case 6: // fin
 			chkMatch, filChkMatch := processFin(respProto.GetPayload(), respProto.GetChecksum(), reqFile)
 			if chkMatch == false { // checksum mismatch, retransmit the FIN
 				writeToListener(conn, dst, sid, []byte(""), []byte(""), 7)
+				updateCache(sid, []byte(""), []byte(""), 7)
 				continue
 			}
-
 			if filChkMatch == false { // file data mismatch, restart whole transfer
 				sid, pyld, chk, flg := genInit()
 				writeToListener(conn, dst, sid, pyld, chk, flg)
+				updateCache(sid, pyld, chk, flg)
 				continue
 			}
+			writeToListener(conn, dst, sid, []byte("finAck"), []byte(""), 1) // send a final ack
+			updateCache(sid, []byte("finack"), []byte(""), 1)
 			break recvLoop
 
 		case 7: //retrans
@@ -115,16 +123,6 @@ func genInit() (int32, []byte, []byte, pbuf.IFTPP_Flag) {
 	var flg pbuf.IFTPP_Flag = 0
 
 	return sid, pyld, chk, flg
-}
-
-func genClientKey() ([]byte, []byte, pbuf.IFTPP_Flag) {
-	cliKey := make([]byte, 16)
-	rand.Read(cliKey)
-	var pyld = cliKey
-	var chk = calcChecksum(pyld)
-	var flg pbuf.IFTPP_Flag = 2
-
-	return pyld, chk, flg
 }
 
 func genFileReq(reqFile string) ([]byte, []byte, pbuf.IFTPP_Flag) {
