@@ -8,13 +8,11 @@ import (
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
 	"log"
+	"math/rand"
 	"net"
 	"sort"
 	"time"
 )
-
-// magicstr will be prepended to ICMP body for packet identification
-var magicstr = []byte{11, 12, 13, 14}
 
 // icmpConst is usually one, used for protocol marshalling (ipv6 support has a diff one)
 const icmpConst int = 1
@@ -171,4 +169,12 @@ func compareChks(myChk []byte, chk []byte) bool {
 		}
 	}
 	return true
+}
+
+func genKey() ([]byte, []byte) {
+	cliKey := make([]byte, 16)
+	rand.Read(cliKey)
+	var pyld = cliKey
+	var chk = calcChecksum(pyld)
+	return pyld, chk
 }
