@@ -137,6 +137,8 @@ func processFileData(pyld []byte, chk []byte) bool {
 		return false
 	}
 	decodedFileData := xorData(pyld, shrdKey)
+	fmt.Printf("appending: ")
+	fmt.Println(decodedFileData)
 	fdata = append(fdata, decodedFileData...)
 	return true
 }
@@ -147,11 +149,11 @@ func processFin(pyld []byte, chk []byte, reqFile string) (bool, bool) {
 		return false, false // if the FIN payload is mangled, RETRANS is required
 	}
 
-	// this codeblock should check if the final file matches, but can't get it wrking :(
-	//myFileDataCheck := calcChecksum(fdata)
-	//if match := compareChks(myFileDataCheck, pyld); match == false {
-	//	return true, false // if the final file checksums don't match, restart entire transfer
-	//}
+	// make sure the complete filedata matches the original
+	myFileDataCheck := calcChecksum(fdata)
+	if match := compareChks(myFileDataCheck, pyld); match == false {
+		return true, false // if the final file checksums don't match, restart entire transfer
+	}
 
 	fil, err := os.Create(reqFile)
 	if err != nil {

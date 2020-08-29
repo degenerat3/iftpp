@@ -129,7 +129,7 @@ func splitFile(ses *session) {
 
 	for {
 		if len(allData) > splitSize {
-			chnk := allData[0 : splitSize-1]
+			chnk := allData[0:splitSize]
 			fChunks = append(fChunks, chnk)
 			allData = allData[splitSize:]
 		} else {
